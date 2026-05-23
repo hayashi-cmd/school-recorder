@@ -247,11 +247,10 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 600;
-      padding: 4px 10px;
+      padding: 5px 12px;
       border-radius: 20px;
-      margin-bottom: 10px;
     }
     #recognition-status.active {
       background: #c6f6d5;
@@ -264,6 +263,34 @@
     #recognition-status.error {
       background: #fed7d7;
       color: #c53030;
+    }
+
+    /* 文字起こし手動再開ボタン */
+    #restart-recognition-btn {
+      display: none;
+      margin-left: 8px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1.5px solid #e53e3e;
+      background: white;
+      color: #e53e3e;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #restart-recognition-btn:hover {
+      background: #fff5f5;
+    }
+
+    .transcript-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .transcript-header h2 {
+      margin-bottom: 0;
     }
 
     /* 警告メッセージ */
@@ -337,9 +364,11 @@
 
   <!-- 文字起こし -->
   <div class="transcript-section">
-    <h2>📝 文字起こし
+    <div class="transcript-header">
+      <h2>📝 文字起こし</h2>
       <span id="recognition-status" class="inactive">⏸ 待機中</span>
-    </h2>
+      <button id="restart-recognition-btn" onclick="manualRestartRecognition()">↺ 再開</button>
+    </div>
     <div id="warn-msg"></div>
     <div id="transcript-box">
       <span class="placeholder">録音を開始すると、ここにリアルタイムで文字が表示されます。</span>
@@ -378,7 +407,6 @@
   let finalTranscript = '';
   let recognitionActive = false;
   let recognitionRestartCount = 0;
-  const MAX_RESTARTS = 5;
 
   const recordBtn = document.getElementById('record-btn');
   const recordBtnWrap = document.getElementById('record-btn-wrap');
@@ -407,11 +435,21 @@
   async function startRecording() {
     hideError();
 
-    // マイク許可を取得
+    // 文字起こしを先に起動してマイクを確保（MediaRecorderより先）
+    finalTranscript = '';
+    transcriptBox.innerHTML = '';
+    updateCharCount();
+    startRecognition();
+
+    // 認識エンジンが起動するまで少し待つ
+    await new Promise(r => setTimeout(r, 600));
+
+    // マイク許可を取得（録音用）
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
+      stopRecognition();
       showError('マイクへのアクセスが許可されていません。ブラウザのアドレスバー左のアイコンからマイクを許可してください。');
       return;
     }
@@ -435,12 +473,6 @@
     };
 
     mediaRecorder.start(1000);
-
-    // 文字起こし初期化
-    finalTranscript = '';
-    transcriptBox.innerHTML = '';
-    updateCharCount();
-    startRecognition();
 
     // タイマー開始
     elapsedSeconds = 0;
@@ -511,6 +543,7 @@
     recognition.onstart = () => {
       recognitionRestartCount = 0;
       setRecogStatus('active', '● 認識中');
+      hideError();
     };
 
     recognition.onresult = (event) => {
@@ -529,24 +562,15 @@
 
     recognition.onend = () => {
       if (!isRecording || !recognitionActive) return;
-      setRecogStatus('inactive', '⏸ 再起動中');
       recognitionRestartCount++;
-      if (recognitionRestartCount >= MAX_RESTARTS) {
-        setRecogStatus('error', '❌ 停止');
-        showError(
-          '音声認識が繰り返し停止しました。\n' +
-          '【原因】このファイルを「file://」で開いている場合、Chromeの制限により文字起こしが動作しません。\n' +
-          '【解決策】このファイルを Google Drive にアップロードし、そこから開いてください。'
-        );
-        recognitionActive = false;
-        return;
-      }
-      // 少し待ってから再起動（即時再起動だとエラーが続くことがある）
+      // 連続失敗が多い場合は待機時間を延ばして再起動（上限なし）
+      const delay = recognitionRestartCount > 10 ? 2000 : 800;
+      setRecogStatus('inactive', '⏸ 再起動中...');
       setTimeout(() => {
         if (isRecording && recognitionActive) {
-          try { recognition.start(); } catch (e) { createAndStartRecognition(); }
+          createAndStartRecognition();
         }
-      }, 300);
+      }, delay);
     };
 
     recognition.onerror = (event) => {
@@ -575,6 +599,7 @@
 
   function stopRecognition() {
     recognitionActive = false;
+    document.getElementById('restart-recognition-btn').style.display = 'none';
     setRecogStatus('inactive', '⏸ 待機中');
     if (recognition) {
       try { recognition.stop(); } catch (e) { /* ignore */ }
@@ -586,6 +611,19 @@
   function setRecogStatus(type, text) {
     recogStatus.className = type;
     recogStatus.textContent = text;
+    const restartBtn = document.getElementById('restart-recognition-btn');
+    // 録音中かつ認識が停止・エラーのときだけ「再開」ボタンを表示
+    restartBtn.style.display = (isRecording && (type === 'error' || type === 'inactive')) ? 'inline-block' : 'none';
+  }
+
+  function manualRestartRecognition() {
+    if (!isRecording) return;
+    recognitionActive = true;
+    recognitionRestartCount = 0;
+    if (recognition) {
+      try { recognition.stop(); } catch (e) { /* ignore */ }
+    }
+    setTimeout(() => createAndStartRecognition(), 300);
   }
 
   function renderTranscript(interim) {
