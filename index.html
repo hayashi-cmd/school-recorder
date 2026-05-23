@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>授業録音・文字起こしツール</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+      background: #f0f4f8;
+      color: #2d3748;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #1a202c;
+    }
+
+    header p {
+      font-size: 0.875rem;
+      color: #718096;
+      margin-top: 6px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      padding: 32px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    /* 録音コントロール */
+    .record-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 28px;
+    }
+
+    #record-btn {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      border: none;
+      background: #e53e3e;
+      color: white;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(229, 62, 62, 0.4);
+    }
+
+    #record-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(229, 62, 62, 0.5);
+    }
+
+    #record-btn.recording {
+      background: #718096;
+      box-shadow: 0 4px 16px rgba(113, 128, 150, 0.4);
+      animation: pulse 1.5s infinite;
+    }
+
+    #record-btn.recording:hover {
+      box-shadow: 0 6px 20px rgba(113, 128, 150, 0.5);
+    }
+
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+
+    #record-btn .icon {
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+
+    #record-btn .label {
+      font-size: 0.9rem;
+    }
+
+    #timer {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #2d3748;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+    }
+
+    #status-msg {
+      font-size: 0.875rem;
+      color: #718096;
+      height: 20px;
+      text-align: center;
+    }
+
+    #status-msg.active {
+      color: #e53e3e;
+      font-weight: 600;
+    }
+
+    /* 文字起こしエリア */
+    .transcript-section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #4a5568;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #transcript-box {
+      width: 100%;
+      min-height: 200px;
+      max-height: 360px;
+      overflow-y: auto;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #2d3748;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    #transcript-box .interim {
+      color: #a0aec0;
+    }
+
+    #transcript-box .placeholder {
+      color: #a0aec0;
+      font-style: italic;
+    }
+
+    .char-count {
+      text-align: right;
+      font-size: 0.8rem;
+      color: #a0aec0;
+      margin-top: 6px;
+    }
+
+    /* ダウンロードボタン */
+    .download-section {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .dl-btn {
+      flex: 1;
+      min-width: 160px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 2px solid;
+      font-size: 0.925rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: white;
+    }
+
+    #dl-audio {
+      border-color: #4299e1;
+      color: #4299e1;
+    }
+
+    #dl-audio:hover:not(:disabled) {
+      background: #4299e1;
+      color: white;
+    }
+
+    #dl-text {
+      border-color: #48bb78;
+      color: #48bb78;
+    }
+
+    #dl-text:hover:not(:disabled) {
+      background: #48bb78;
+      color: white;
+    }
+
+    .dl-btn:disabled {
+      border-color: #e2e8f0;
+      color: #cbd5e0;
+      cursor: not-allowed;
+    }
+
+    /* 音声認識ステータス */
+    #recognition-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+    }
+    #recognition-status.active {
+      background: #c6f6d5;
+      color: #276749;
+    }
+    #recognition-status.inactive {
+      background: #e2e8f0;
+      color: #718096;
+    }
+    #recognition-status.error {
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    /* 警告メッセージ */
+    #warn-msg {
+      margin-top: 0;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: #fffbeb;
+      border: 1px solid #f6e05e;
+      border-radius: 8px;
+      color: #744210;
+      font-size: 0.875rem;
+      display: none;
+      line-height: 1.6;
+    }
+
+    /* エラーメッセージ */
+    #error-msg {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: #fff5f5;
+      border: 1px solid #feb2b2;
+      border-radius: 8px;
+      color: #c53030;
+      font-size: 0.875rem;
+      display: none;
+      line-height: 1.6;
+    }
+
+    /* 注意書き */
+    footer {
+      margin-top: 20px;
+      font-size: 0.8rem;
+      color: #a0aec0;
+      text-align: center;
+      max-width: 680px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎙️ 授業録音・文字起こしツール</h1>
+  <p>Chromebook 対応 ／ インターネット接続が必要です</p>
+</header>
+
+<div class="card">
+
+  <!-- 録音コントロール -->
+  <div class="record-section">
+    <button id="record-btn" onclick="toggleRecording()">
+      <span class="icon">⏺</span>
+      <span class="label">録音開始</span>
+    </button>
+    <div id="timer">00:00:00</div>
+<div id="status-msg">ボタンを押すと録音が始まります</div>
+  </div>
+
+  <!-- 文字起こし -->
+  <div class="transcript-section">
+    <h2>📝 文字起こし
+      <span id="recognition-status" class="inactive">⏸ 待機中</span>
+    </h2>
+    <div id="warn-msg"></div>
+    <div id="transcript-box">
+      <span class="placeholder">録音を開始すると、ここにリアルタイムで文字が表示されます。</span>
+    </div>
+    <div class="char-count" id="char-count">0 文字</div>
+  </div>
+
+  <!-- ダウンロード -->
+  <div class="download-section">
+    <button class="dl-btn" id="dl-audio" disabled onclick="downloadAudio()">
+      🎵 音声をダウンロード（.webm）
+    </button>
+    <button class="dl-btn" id="dl-text" disabled onclick="downloadText()">
+      📄 テキストをダウンロード（.txt）
+    </button>
+  </div>
+
+  <div id="error-msg"></div>
+
+</div>
+
+<footer>
+  ※ 文字起こしはブラウザの音声認識機能を使用しています。精度はインターネット環境や話し方に影響されます。<br>
+  ※ 録音データはこの端末内のみで処理され、外部に送信されません（音声認識のみGoogleサーバーを使用）。
+</footer>
+
+<script>
+  // ===== 状態管理 =====
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let audioBlob = null;
+  let recognition = null;
+  let isRecording = false;
+  let timerInterval = null;
+  let elapsedSeconds = 0;
+  let finalTranscript = '';
+  let recognitionActive = false;
+  let recognitionRestartCount = 0;
+  const MAX_RESTARTS = 5;
+
+  const recordBtn = document.getElementById('record-btn');
+const timerEl = document.getElementById('timer');
+  const statusMsg = document.getElementById('status-msg');
+  const transcriptBox = document.getElementById('transcript-box');
+  const charCount = document.getElementById('char-count');
+  const dlAudio = document.getElementById('dl-audio');
+  const dlText = document.getElementById('dl-text');
+  const errorMsg = document.getElementById('error-msg');
+  const warnMsg = document.getElementById('warn-msg');
+  const recogStatus = document.getElementById('recognition-status');
+
+  // ===== 録音切り替え =====
+  async function toggleRecording() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  }
+
+  async function startRecording() {
+    hideError();
+
+    // マイク許可を取得
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      showError('マイクへのアクセスが許可されていません。ブラウザのアドレスバー左のアイコンからマイクを許可してください。');
+      return;
+    }
+
+    // MediaRecorder 初期化
+    audioChunks = [];
+    audioBlob = null;
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      audioBlob = new Blob(audioChunks, { type: mimeType });
+      stream.getTracks().forEach(t => t.stop());
+      dlAudio.disabled = false;
+    };
+
+    mediaRecorder.start(1000);
+
+    // 文字起こし初期化
+    finalTranscript = '';
+    transcriptBox.innerHTML = '';
+    updateCharCount();
+    startRecognition();
+
+    // タイマー開始
+    elapsedSeconds = 0;
+    updateTimer();
+    timerInterval = setInterval(() => {
+      elapsedSeconds++;
+      updateTimer();
+    }, 1000);
+
+    // UI更新
+    isRecording = true;
+    recordBtn.classList.add('recording');
+    recordBtn.querySelector('.icon').textContent = '⏹';
+    recordBtn.querySelector('.label').textContent = '録音停止';
+    statusMsg.textContent = '● 録音中';
+    statusMsg.classList.add('active');
+    dlAudio.disabled = true;
+    dlText.disabled = true;
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    stopRecognition();
+    clearInterval(timerInterval);
+
+    // テキストが1文字以上あればダウンロード有効化
+    if (finalTranscript.trim().length > 0) {
+      dlText.disabled = false;
+    }
+
+    // UI更新
+    isRecording = false;
+    recordBtn.classList.remove('recording');
+    recordBtn.querySelector('.icon').textContent = '⏺';
+    recordBtn.querySelector('.label').textContent = '録音開始';
+    statusMsg.textContent = '録音が完了しました';
+    statusMsg.classList.remove('active');
+  }
+
+  // ===== Web Speech API =====
+  function startRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setRecogStatus('error', '❌ 非対応');
+      showError('このブラウザは音声認識に対応していません。Google Chrome をお使いください。');
+      return;
+    }
+
+    recognitionActive = true;
+    recognitionRestartCount = 0;
+    createAndStartRecognition();
+  }
+
+  function createAndStartRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      recognitionRestartCount = 0;
+      setRecogStatus('active', '● 認識中');
+    };
+
+    recognition.onresult = (event) => {
+      recognitionRestartCount = 0;
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+      renderTranscript(interimText);
+    };
+
+    recognition.onend = () => {
+      if (!isRecording || !recognitionActive) return;
+      setRecogStatus('inactive', '⏸ 再起動中');
+      recognitionRestartCount++;
+      if (recognitionRestartCount >= MAX_RESTARTS) {
+        setRecogStatus('error', '❌ 停止');
+        showError(
+          '音声認識が繰り返し停止しました。\n' +
+          '【原因】このファイルを「file://」で開いている場合、Chromeの制限により文字起こしが動作しません。\n' +
+          '【解決策】このファイルを Google Drive にアップロードし、そこから開いてください。'
+        );
+        recognitionActive = false;
+        return;
+      }
+      // 少し待ってから再起動（即時再起動だとエラーが続くことがある）
+      setTimeout(() => {
+        if (isRecording && recognitionActive) {
+          try { recognition.start(); } catch (e) { createAndStartRecognition(); }
+        }
+      }, 300);
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech') return; // 無音は無視
+      if (event.error === 'not-allowed') {
+        setRecogStatus('error', '❌ 権限エラー');
+        showError('音声認識のマイク権限が拒否されました。ブラウザのアドレスバー左のアイコンからマイクを許可してください。');
+        recognitionActive = false;
+        return;
+      }
+      if (event.error === 'network') {
+        setRecogStatus('error', '❌ 通信エラー');
+        showError('音声認識にはインターネット接続が必要です。接続を確認してください。');
+        recognitionActive = false;
+        return;
+      }
+      // aborted など：onend で再起動するので静観
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      showError('音声認識の起動に失敗しました: ' + e.message);
+    }
+  }
+
+  function stopRecognition() {
+    recognitionActive = false;
+    setRecogStatus('inactive', '⏸ 待機中');
+    if (recognition) {
+      try { recognition.stop(); } catch (e) { /* ignore */ }
+      recognition = null;
+    }
+    renderTranscript('');
+  }
+
+  function setRecogStatus(type, text) {
+    recogStatus.className = type;
+    recogStatus.textContent = text;
+  }
+
+  function renderTranscript(interim) {
+    if (!finalTranscript && !interim) {
+      transcriptBox.innerHTML = '<span class="placeholder">録音を開始すると、ここにリアルタイムで文字が表示されます。</span>';
+    } else {
+      transcriptBox.innerHTML =
+        escapeHtml(finalTranscript) +
+        (interim ? '<span class="interim">' + escapeHtml(interim) + '</span>' : '');
+    }
+    transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    updateCharCount();
+  }
+
+  function updateCharCount() {
+    charCount.textContent = finalTranscript.length + ' 文字';
+  }
+
+  // ===== タイマー =====
+  function updateTimer() {
+    const h = Math.floor(elapsedSeconds / 3600);
+    const m = Math.floor((elapsedSeconds % 3600) / 60);
+    const s = elapsedSeconds % 60;
+    timerEl.textContent =
+      String(h).padStart(2, '0') + ':' +
+      String(m).padStart(2, '0') + ':' +
+      String(s).padStart(2, '0');
+  }
+
+  // ===== ダウンロード =====
+  function downloadAudio() {
+    if (!audioBlob) return;
+    const now = formatDateForFilename(new Date());
+    const url = URL.createObjectURL(audioBlob);
+    triggerDownload(url, '録音_' + now + '.webm');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function downloadText() {
+    if (!finalTranscript.trim()) return;
+    const now = formatDateForFilename(new Date());
+    const blob = new Blob([finalTranscript], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, '文字起こし_' + now + '.txt');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function triggerDownload(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function formatDateForFilename(d) {
+    return d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      String(d.getDate()).padStart(2, '0') + '_' +
+      String(d.getHours()).padStart(2, '0') +
+      String(d.getMinutes()).padStart(2, '0');
+  }
+
+  // ===== ユーティリティ =====
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  function showError(msg) {
+    errorMsg.innerHTML = msg.replace(/\n/g, '<br>');
+    errorMsg.style.display = 'block';
+  }
+
+  function hideError() {
+    errorMsg.style.display = 'none';
+    errorMsg.innerHTML = '';
+  }
+
+  function showWarn(msg) {
+    warnMsg.innerHTML = msg.replace(/\n/g, '<br>');
+    warnMsg.style.display = 'block';
+  }
+
+  // ===== 対応確認 =====
+  window.addEventListener('DOMContentLoaded', () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showError('このブラウザは録音に対応していません。最新の Google Chrome をお使いください。');
+      recordBtn.disabled = true;
+    }
+    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+      showError('このブラウザは音声認識に対応していません。Google Chrome をお使いください。文字起こし機能は使用できませんが、録音は可能です。');
+    }
+
+  });
+</script>
+
+</body>
+</html>
