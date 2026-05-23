@@ -59,53 +59,71 @@
       margin-bottom: 28px;
     }
 
+    /* ボタン外側のリップル用ラッパー */
+    .record-btn-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 160px;
+      height: 160px;
+    }
+
+    .record-btn-wrap.recording::before,
+    .record-btn-wrap.recording::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 120, 150, 0.25);
+      animation: ripple 2s ease-out infinite;
+      pointer-events: none;
+    }
+    .record-btn-wrap.recording::after {
+      animation-delay: 1s;
+    }
+
+    @keyframes ripple {
+      0%   { width: 148px; height: 148px; opacity: 0.7; }
+      100% { width: 220px; height: 220px; opacity: 0; }
+    }
+
     #record-btn {
-      width: 140px;
-      height: 140px;
+      width: 148px;
+      height: 148px;
       border-radius: 50%;
       border: none;
-      background: #e53e3e;
+      background: linear-gradient(145deg, #ff9eb5, #ff5c8a);
       color: white;
-      font-size: 1rem;
       font-weight: 700;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      box-shadow: 0 4px 16px rgba(229, 62, 62, 0.4);
+      gap: 10px;
+      box-shadow: 0 6px 20px rgba(255, 92, 138, 0.45);
+      position: relative;
+      z-index: 1;
     }
 
     #record-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 6px 20px rgba(229, 62, 62, 0.5);
+      transform: scale(1.06);
+      box-shadow: 0 8px 28px rgba(255, 92, 138, 0.55);
     }
 
     #record-btn.recording {
-      background: #718096;
-      box-shadow: 0 4px 16px rgba(113, 128, 150, 0.4);
-      animation: pulse 1.5s infinite;
+      background: linear-gradient(145deg, #a0aec0, #718096);
+      box-shadow: 0 6px 20px rgba(113, 128, 150, 0.45);
     }
 
     #record-btn.recording:hover {
-      box-shadow: 0 6px 20px rgba(113, 128, 150, 0.5);
-    }
-
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.04); }
-    }
-
-    #record-btn .icon {
-      font-size: 2.2rem;
-      line-height: 1;
+      box-shadow: 0 8px 28px rgba(113, 128, 150, 0.55);
     }
 
     #record-btn .label {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
     }
 
     #timer {
@@ -297,10 +315,22 @@
 
   <!-- 録音コントロール -->
   <div class="record-section">
-    <button id="record-btn" onclick="toggleRecording()">
-      <span class="icon">⏺</span>
-      <span class="label">録音開始</span>
-    </button>
+    <div class="record-btn-wrap" id="record-btn-wrap">
+      <button id="record-btn" onclick="toggleRecording()">
+        <!-- マイクアイコン（待機中） -->
+        <svg id="icon-mic" width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="6" height="11" rx="3" fill="white"/>
+          <path d="M5 11a7 7 0 0 0 14 0" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="18" x2="12" y2="22" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="8.5" y1="22" x2="15.5" y2="22" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <!-- 停止アイコン（録音中） -->
+        <svg id="icon-stop" width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:none">
+          <rect x="6" y="6" width="12" height="12" rx="3" fill="white"/>
+        </svg>
+        <span class="label" id="btn-label">録音開始</span>
+      </button>
+    </div>
     <div id="timer">00:00:00</div>
 <div id="status-msg">ボタンを押すと録音が始まります</div>
   </div>
@@ -351,7 +381,11 @@
   const MAX_RESTARTS = 5;
 
   const recordBtn = document.getElementById('record-btn');
-const timerEl = document.getElementById('timer');
+  const recordBtnWrap = document.getElementById('record-btn-wrap');
+  const iconMic = document.getElementById('icon-mic');
+  const iconStop = document.getElementById('icon-stop');
+  const btnLabel = document.getElementById('btn-label');
+  const timerEl = document.getElementById('timer');
   const statusMsg = document.getElementById('status-msg');
   const transcriptBox = document.getElementById('transcript-box');
   const charCount = document.getElementById('char-count');
@@ -419,8 +453,10 @@ const timerEl = document.getElementById('timer');
     // UI更新
     isRecording = true;
     recordBtn.classList.add('recording');
-    recordBtn.querySelector('.icon').textContent = '⏹';
-    recordBtn.querySelector('.label').textContent = '録音停止';
+    recordBtnWrap.classList.add('recording');
+    iconMic.style.display = 'none';
+    iconStop.style.display = 'block';
+    btnLabel.textContent = '録音停止';
     statusMsg.textContent = '● 録音中';
     statusMsg.classList.add('active');
     dlAudio.disabled = true;
@@ -442,8 +478,10 @@ const timerEl = document.getElementById('timer');
     // UI更新
     isRecording = false;
     recordBtn.classList.remove('recording');
-    recordBtn.querySelector('.icon').textContent = '⏺';
-    recordBtn.querySelector('.label').textContent = '録音開始';
+    recordBtnWrap.classList.remove('recording');
+    iconMic.style.display = 'block';
+    iconStop.style.display = 'none';
+    btnLabel.textContent = '録音開始';
     statusMsg.textContent = '録音が完了しました';
     statusMsg.classList.remove('active');
   }
