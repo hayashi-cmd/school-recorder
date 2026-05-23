@@ -407,6 +407,7 @@
   let finalTranscript = '';
   let recognitionActive = false;
   let recognitionRestartCount = 0;
+  let restartTimer = null;
 
   const recordBtn = document.getElementById('record-btn');
   const recordBtnWrap = document.getElementById('record-btn-wrap');
@@ -560,13 +561,17 @@
       renderTranscript(interimText);
     };
 
+    const thisRecognition = recognition;
     recognition.onend = () => {
+      // 手動再開などで既に別インスタンスに切り替わっていたら無視
+      if (recognition !== thisRecognition) return;
       if (!isRecording || !recognitionActive) return;
       recognitionRestartCount++;
-      // 連続失敗が多い場合は待機時間を延ばして再起動（上限なし）
       const delay = recognitionRestartCount > 10 ? 2000 : 800;
       setRecogStatus('inactive', '⏸ 再起動中...');
-      setTimeout(() => {
+      clearTimeout(restartTimer);
+      restartTimer = setTimeout(() => {
+        restartTimer = null;
         if (isRecording && recognitionActive) {
           createAndStartRecognition();
         }
@@ -599,6 +604,8 @@
 
   function stopRecognition() {
     recognitionActive = false;
+    clearTimeout(restartTimer);
+    restartTimer = null;
     document.getElementById('restart-recognition-btn').style.display = 'none';
     setRecogStatus('inactive', '⏸ 待機中');
     if (recognition) {
@@ -618,12 +625,17 @@
 
   function manualRestartRecognition() {
     if (!isRecording) return;
+    // 自動再起動タイマーをキャンセル
+    clearTimeout(restartTimer);
+    restartTimer = null;
+    // 古い認識インスタンスを破棄（onend を発火させないよう先に null 化）
+    const old = recognition;
+    recognition = null;
     recognitionActive = true;
     recognitionRestartCount = 0;
-    if (recognition) {
-      try { recognition.stop(); } catch (e) { /* ignore */ }
-    }
-    setTimeout(() => createAndStartRecognition(), 300);
+    if (old) { try { old.abort(); } catch (e) { /* ignore */ } }
+    // 直接新しいインスタンスで起動
+    createAndStartRecognition();
   }
 
   function renderTranscript(interim) {
